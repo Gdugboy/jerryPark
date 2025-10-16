@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>jerryPark – Repo Browser</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 16px; }
+    h1 { margin-bottom: 8px; }
+    .path { color: #666; margin-bottom: 24px; }
+    ul { list-style: none; padding: 0; }
+    li { padding: 8px 0; border-bottom: 1px solid #eee; display: flex; gap: 10px; align-items: center; }
+    .type { font-size: 12px; padding: 2px 6px; border: 1px solid #ddd; border-radius: 6px; }
+    a { text-decoration: none; }
+    .crumbs a { color: #0070f3; }
+  </style>
+</head>
+<body>
+  <h1>jerryPark – 파일 보기</h1>
+  <div class="path"></div>
+  <ul id="list"></ul>
+
+  <script>
+    // 설정
+    const owner = "gdugboy";
+    const repo  = "jerryPark";
+    const branch = "main";
+
+    // URL ?path=... 로 폴더 진입
+    const params = new URLSearchParams(location.search);
+    const path = params.get("path") || "";
+
+    // 크럼브(상단 경로)
+    function renderBreadcrumb(path) {
+      const cont = document.querySelector(".path");
+      const parts = path ? path.split("/") : [];
+      const crumbs = ['<span class="crumbs"><a href="?">/</a>'];
+      let acc = "";
+      parts.forEach((p, i) => {
+        acc += (i ? "/" : "") + p;
+        crumbs.push(` / <a href="?path=${encodeURIComponent(acc)}">${p}</a>`);
+      });
+      crumbs.push("</span>");
+      cont.innerHTML = crumbs.join("");
+    }
+
+    async function load() {
+      renderBreadcrumb(path);
+
+      const url = path
+        ? `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${branch}`
+        : `https://api.github.com/repos/${owner}/${repo}/contents?ref=${branch}`;
+
+      const res = await fetch(url);
+      if (!res.ok) {
+        document.getElementById("list").innerHTML = `<li>불러오기 실패: ${res.status}</li>`;
+        return;
+      }
+      const items = await res.json();
+
+      const list = document.getElementById("list");
+      list.innerHTML = "";
+
+      // 상위 폴더로
+      if (path) {
+        const up = path.split("/").slice(0, -1).join("/");
+        const upHref = up ? `?path=${encodeURIComponent(up)}` : `?`;
+        const li = document.createElement("li");
+        li.innerHTML = `<span class="type">UP</span> <a href="${upHref}">.. (상위 폴더)</a>`;
+        list.appendChild(li);
+      }
+
+      // 정렬: 폴더 먼저
+      items.sort((a, b) => (a.type === b.type) ? a.name.localeCompare(b.name) : (a.type === "dir" ? -1 : 1));
+
+      for (const it of items) {
+        const li = document.createElement("li");
+        if (it.type === "dir") {
+          const next = path ? `${path}/${it.name}` : it.name;
+          li.innerHTML = `<span class="type">DIR</span> <a href="?path=${encodeURIComponent(next)}">${it.name}</a>`;
+        } else {
+          // 원본(뷰) / RAW(다운로드) 링크
+          const viewUrl = it.html_url;            // GitHub 파일 페이지
+          const rawUrl  = it.download_url;        // Raw 파일
+          li.innerHTML = `<span class="type">FILE</span> <a href="${rawUrl}" target="_blank">${it.name}</a> &nbsp;·&nbsp; <a href="${viewUrl}" target="_blank">GitHub</a>`;
+        }
+        list.appendChild(li);
+      }
+    }
+    load();
+  </script>
+</body>
+</html>
